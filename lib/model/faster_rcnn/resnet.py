@@ -227,7 +227,7 @@ class resnet(_fasterRCNN):
     _fasterRCNN.__init__(self, classes, class_agnostic)
 
   def _init_modules(self):
-    resnet = resnet101()
+    resnet = resnet18()
 
     if self.pretrained == True:
       print("Loading pretrained weights from %s" %(self.model_path))

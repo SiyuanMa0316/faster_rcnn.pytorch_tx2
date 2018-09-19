@@ -52,7 +52,10 @@ def parse_args():
                       default='cfgs/vgg16.yml', type=str)
   parser.add_argument('--net', dest='net',
                       help='vgg16, res50, res101, res152',
-                      default='res101', type=str)
+                      default='vgg16', type=str)
+  parser.add_argument('--channel_num', dest='channel_num',
+                      help='channel number of base feature',
+                      default=512, type=int)
   parser.add_argument('--set', dest='set_cfgs',
                       help='set config keys', default=None,
                       nargs=argparse.REMAINDER)
@@ -141,32 +144,33 @@ if __name__ == '__main__':
 
   print('{:d} roidb entries'.format(len(roidb)))
 
-  input_dir = args.load_dir + "/" + args.net + "/" + args.dataset
-  if not os.path.exists(input_dir):
-    raise Exception('There is no input directory for loading network from ' + input_dir)
-  load_name = os.path.join(input_dir,
-    'faster_rcnn_{}_{}_{}.pth'.format(args.checksession, args.checkepoch, args.checkpoint))
+  #input_dir = args.load_dir + "/" + args.net + "/" + args.dataset
+  #if not os.path.exists(input_dir):
+  #  raise Exception('There is no input directory for loading network from ' + input_dir)
+  #load_name = os.path.join(input_dir,
+  #  'faster_rcnn_{}_{}_{}.pth'.format(args.checksession, args.checkepoch, args.checkpoint))
 
   # initilize the network here.
   if args.net == 'vgg16':
-    fasterRCNN = vgg16(imdb.classes, pretrained=False, class_agnostic=args.class_agnostic)
+    fasterRCNN = vgg16(imdb.classes, pretrained=False, class_agnostic=args.class_agnostic, channel_num=args.channel_num)
   elif args.net == 'res101':
     fasterRCNN = resnet(imdb.classes, 101, pretrained=False, class_agnostic=args.class_agnostic)
   elif args.net == 'res50':
     fasterRCNN = resnet(imdb.classes, 50, pretrained=False, class_agnostic=args.class_agnostic)
   elif args.net == 'res152':
     fasterRCNN = resnet(imdb.classes, 152, pretrained=False, class_agnostic=args.class_agnostic)
+  elif args.net == 'res18':
+    fasterRCNN = resnet(imdb.classes, 18, pretrained=False, class_agnostic=args.class_agnostic)
   else:
     print("network is not defined")
     pdb.set_trace()
 
   fasterRCNN.create_architecture()
 
-  print("load checkpoint %s" % (load_name))
-  checkpoint = torch.load(load_name)
-  fasterRCNN.load_state_dict(checkpoint['model'])
-  if 'pooling_mode' in checkpoint.keys():
-    cfg.POOLING_MODE = checkpoint['pooling_mode']
+  #print("load checkpoint %s" % (load_name))
+  #fasterRCNN.load_state_dict(checkpoint['model'])
+  #if 'pooling_mode' in checkpoint.keys():
+  #  cfg.POOLING_MODE = checkpoint['pooling_mode']
 
 
   print('load model successfully!')
@@ -183,6 +187,8 @@ if __name__ == '__main__':
     num_boxes = num_boxes.cuda()
     gt_boxes = gt_boxes.cuda()
 
+  print('data ship to cuda success')
+
   # make variable
   im_data = Variable(im_data)
   im_info = Variable(im_info)
@@ -194,6 +200,8 @@ if __name__ == '__main__':
 
   if args.cuda:
     fasterRCNN.cuda()
+
+  print('model ship to cuda success')
 
   start = time.time()
   max_per_image = 100
@@ -224,6 +232,12 @@ if __name__ == '__main__':
 
   fasterRCNN.eval()
   empty_array = np.transpose(np.array([[],[],[],[],[]]), (1,0))
+
+  avg_detect_time=0
+  avg_base_time=0
+  avg_head_time=0
+  avg_reg_time=0
+  avg_rpn_time=0
   for i in range(num_images):
 
       data = next(data_iter)
@@ -232,15 +246,21 @@ if __name__ == '__main__':
       gt_boxes.data.resize_(data[2].size()).copy_(data[2])
       num_boxes.data.resize_(data[3].size()).copy_(data[3])
 
+      #print('data resize success')
+
       det_tic = time.time()
       rois, cls_prob, bbox_pred, \
       rpn_loss_cls, rpn_loss_box, \
       RCNN_loss_cls, RCNN_loss_bbox, \
-      rois_label = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+      rois_label, base_time, head_time, rpn_time, roi_pooling_time, headtotail_time, bbox_and_prob_time, \
+      conv1_time, cls_score_time, reshape_time, bbox_pred_time, \
+      proposal_time = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+
+      #print('faster_rcnn success')
 
       scores = cls_prob.data
       boxes = rois.data[:, :, 1:5]
-
+      reg_tic = time.time()
       if cfg.TEST.BBOX_REG:
           # Apply bounding-box regression deltas
           box_deltas = bbox_pred.data
@@ -265,8 +285,22 @@ if __name__ == '__main__':
 
       scores = scores.squeeze()
       pred_boxes = pred_boxes.squeeze()
+
+      #calculate average detection time
       det_toc = time.time()
       detect_time = det_toc - det_tic
+      avg_detect_time = (avg_detect_time*i+detect_time)/(i+1)
+      #calculate average base time
+      avg_base_time = (avg_base_time*i+base_time)/(i+1)
+      #calculate average head time
+      avg_head_time = (avg_head_time*i+head_time)/(i+1)
+      #calculate average reg time
+      reg_toc = time.time()
+      reg_time = reg_toc - reg_tic
+      avg_reg_time = (avg_reg_time*i+reg_time)/(i+1)
+      #calculate average rpn time
+      avg_rpn_time = (avg_rpn_time*i+rpn_time)/(i+1)
+
       misc_tic = time.time()
       if vis:
           im = cv2.imread(imdb.image_path_at(i))
@@ -306,8 +340,11 @@ if __name__ == '__main__':
       misc_toc = time.time()
       nms_time = misc_toc - misc_tic
 
-      sys.stdout.write('im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r' \
-          .format(i + 1, num_images, detect_time, nms_time))
+      sys.stdout.write('im_detect: {:d}/{:d} {:.3f}s {:.3f}s avg_detect_time:{:.3f}s avg_head_time:{:.3f}s avg_rpn_time{:.3f}s \r \
+                       conv1_time:{:.3f}s, cls_score_time:{:.3f}s, reshape_time:{:.3f}s, bbox_pred_time:{:.3f}s, proposal_time:{:.3f}s \r' \
+                       .format(i + 1, num_images, detect_time, nms_time, avg_detect_time, avg_head_time, avg_rpn_time,
+                               conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time))
+
       sys.stdout.flush()
 
       if vis:

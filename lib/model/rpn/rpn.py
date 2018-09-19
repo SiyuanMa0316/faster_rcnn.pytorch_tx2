@@ -25,15 +25,15 @@ class _RPN(nn.Module):
         self.feat_stride = cfg.FEAT_STRIDE[0]
 
         # define the convrelu layers processing input feature map
-        self.RPN_Conv = nn.Conv2d(self.din, 512, 3, 1, 1, bias=True)
+        self.RPN_Conv = nn.Conv2d(self.din, self.din, 3, 1, 1, bias=True)
 
         # define bg/fg classifcation score layer
         self.nc_score_out = len(self.anchor_scales) * len(self.anchor_ratios) * 2 # 2(bg/fg) * 9 (anchors)
-        self.RPN_cls_score = nn.Conv2d(512, self.nc_score_out, 1, 1, 0)
+        self.RPN_cls_score = nn.Conv2d(self.din, self.nc_score_out, 1, 1, 0)
 
         # define anchor box offset prediction layer
         self.nc_bbox_out = len(self.anchor_scales) * len(self.anchor_ratios) * 4 # 4(coords) * 9 (anchors)
-        self.RPN_bbox_pred = nn.Conv2d(512, self.nc_bbox_out, 1, 1, 0)
+        self.RPN_bbox_pred = nn.Conv2d(self.din, self.nc_bbox_out, 1, 1, 0)
 
         # define proposal layer
         self.RPN_proposal = _ProposalLayer(self.feat_stride, self.anchor_scales, self.anchor_ratios)
@@ -59,23 +59,39 @@ class _RPN(nn.Module):
 
         batch_size = base_feat.size(0)
 
+        conv1_tic = time.time()
         # return feature map after convrelu layer
         rpn_conv1 = F.relu(self.RPN_Conv(base_feat), inplace=True)
+        conv1_toc = time.time()
+        conv1_time = conv1_toc - conv1_tic
+
+        cls_score_tic = time.time()
         # get rpn classification score
         rpn_cls_score = self.RPN_cls_score(rpn_conv1)
+        cls_score_toc = time.time()
+        cls_score_time = cls_score_toc - cls_score_tic
 
+        reshape_tic = time.time()
         rpn_cls_score_reshape = self.reshape(rpn_cls_score, 2)
         rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, 1)
         rpn_cls_prob = self.reshape(rpn_cls_prob_reshape, self.nc_score_out)
+        reshape_toc = time.time()
+        reshape_time = reshape_toc - reshape_tic
 
+        bbox_pred_tic = time.time()
         # get rpn offsets to the anchor boxes
         rpn_bbox_pred = self.RPN_bbox_pred(rpn_conv1)
+        bbox_pred_toc = time.time()
+        bbox_pred_time = bbox_pred_toc - bbox_pred_tic
 
         # proposal layer
         cfg_key = 'TRAIN' if self.training else 'TEST'
 
+        proposal_tic = time.time()
         rois = self.RPN_proposal((rpn_cls_prob.data, rpn_bbox_pred.data,
                                  im_info, cfg_key))
+        proposal_toc = time.time()
+        proposal_time = proposal_toc - proposal_tic
 
         self.rpn_loss_cls = 0
         self.rpn_loss_box = 0
@@ -107,4 +123,4 @@ class _RPN(nn.Module):
             self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                                             rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
 
-        return rois, self.rpn_loss_cls, self.rpn_loss_box
+        return rois, self.rpn_loss_cls, self.rpn_loss_box, conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time

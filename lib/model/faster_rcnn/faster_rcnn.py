@@ -43,12 +43,21 @@ class _fasterRCNN(nn.Module):
         gt_boxes = gt_boxes.data
         num_boxes = num_boxes.data
 
+        base_tic = time.time()
         # feed image data to base model to obtain base feature map
         base_feat = self.RCNN_base(im_data)
+        base_toc = time.time()
+        base_time = base_toc - base_tic
+
+        head_tic = time.time()
+        rpn_tic = time.time()
 
         # feed base feature map tp RPN to obtain rois
-        rois, rpn_loss_cls, rpn_loss_bbox = self.RCNN_rpn(base_feat, im_info, gt_boxes, num_boxes)
+        rois, rpn_loss_cls, rpn_loss_bbox, conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time = self.RCNN_rpn(base_feat, im_info, gt_boxes, num_boxes)
 
+        rpn_toc = time.time()
+
+        roi_pooling_tic = time.time()
         # if it is training phrase, then use ground trubut bboxes for refining
         if self.training:
             roi_data = self.RCNN_proposal_target(rois, gt_boxes, num_boxes)
@@ -82,9 +91,15 @@ class _fasterRCNN(nn.Module):
         elif cfg.POOLING_MODE == 'pool':
             pooled_feat = self.RCNN_roi_pool(base_feat, rois.view(-1,5))
 
-        # feed pooled features to top model
-        pooled_feat = self._head_to_tail(pooled_feat)
+        roi_pooling_toc = time.time()
 
+        # feed pooled features to top model
+
+        headtotail_tic = time.time()
+        pooled_feat = self._head_to_tail(pooled_feat)
+        headtotail_toc = time.time()
+
+        bbox_and_prob_tic = time.time()
         # compute bbox offset
         bbox_pred = self.RCNN_bbox_pred(pooled_feat)
         if self.training and not self.class_agnostic:
@@ -111,7 +126,22 @@ class _fasterRCNN(nn.Module):
         cls_prob = cls_prob.view(batch_size, rois.size(1), -1)
         bbox_pred = bbox_pred.view(batch_size, rois.size(1), -1)
 
-        return rois, cls_prob, bbox_pred, rpn_loss_cls, rpn_loss_bbox, RCNN_loss_cls, RCNN_loss_bbox, rois_label
+        bbox_and_prob_toc = time.time()
+
+        head_toc = time.time()
+        head_time = head_toc - head_tic
+
+        rpn_time = rpn_toc - rpn_tic
+
+        roi_pooling_time = roi_pooling_toc - roi_pooling_tic
+
+        headtotail_time = headtotail_toc - headtotail_tic
+
+        bbox_and_prob_time = bbox_and_prob_toc - bbox_and_prob_tic
+
+        return rois, cls_prob, bbox_pred, rpn_loss_cls, rpn_loss_bbox, RCNN_loss_cls, RCNN_loss_bbox, rois_label, \
+               base_time, head_time, rpn_time, roi_pooling_time, headtotail_time, bbox_and_prob_time, \
+                conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time
 
     def _init_weights(self):
         def normal_init(m, mean, stddev, truncated=False):
