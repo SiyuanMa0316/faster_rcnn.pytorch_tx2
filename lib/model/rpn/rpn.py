@@ -88,7 +88,7 @@ class _RPN(nn.Module):
         cfg_key = 'TRAIN' if self.training else 'TEST'
 
         proposal_tic = time.time()
-        rois = self.RPN_proposal((rpn_cls_prob.data, rpn_bbox_pred.data,
+        rois, ship_time = self.RPN_proposal((rpn_cls_prob.data, rpn_bbox_pred.data,
                                  im_info, cfg_key))
         proposal_toc = time.time()
         proposal_time = proposal_toc - proposal_tic
@@ -123,4 +123,4 @@ class _RPN(nn.Module):
             self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                                             rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
 
-        return rois, self.rpn_loss_cls, self.rpn_loss_box, conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time
+        return rois, self.rpn_loss_cls, self.rpn_loss_box, proposal_time, ship_time

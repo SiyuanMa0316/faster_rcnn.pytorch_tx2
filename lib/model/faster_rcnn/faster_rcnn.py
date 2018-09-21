@@ -53,7 +53,7 @@ class _fasterRCNN(nn.Module):
         rpn_tic = time.time()
 
         # feed base feature map tp RPN to obtain rois
-        rois, rpn_loss_cls, rpn_loss_bbox, conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time = self.RCNN_rpn(base_feat, im_info, gt_boxes, num_boxes)
+        rois, rpn_loss_cls, rpn_loss_bbox, proposal_time, ship_time = self.RCNN_rpn(base_feat, im_info, gt_boxes, num_boxes)
 
         rpn_toc = time.time()
 
@@ -129,7 +129,7 @@ class _fasterRCNN(nn.Module):
         bbox_and_prob_toc = time.time()
 
         head_toc = time.time()
-        head_time = head_toc - head_tic
+        head_time = head_toc - head_tic - ship_time
 
         rpn_time = rpn_toc - rpn_tic
 
@@ -141,7 +141,7 @@ class _fasterRCNN(nn.Module):
 
         return rois, cls_prob, bbox_pred, rpn_loss_cls, rpn_loss_bbox, RCNN_loss_cls, RCNN_loss_bbox, rois_label, \
                base_time, head_time, rpn_time, roi_pooling_time, headtotail_time, bbox_and_prob_time, \
-                conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time
+               proposal_time, ship_time
 
     def _init_weights(self):
         def normal_init(m, mean, stddev, truncated=False):

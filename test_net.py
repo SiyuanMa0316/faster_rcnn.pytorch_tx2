@@ -253,8 +253,7 @@ if __name__ == '__main__':
       rpn_loss_cls, rpn_loss_box, \
       RCNN_loss_cls, RCNN_loss_bbox, \
       rois_label, base_time, head_time, rpn_time, roi_pooling_time, headtotail_time, bbox_and_prob_time, \
-      conv1_time, cls_score_time, reshape_time, bbox_pred_time, \
-      proposal_time = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+      proposal_time, ship_time  = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
 
       #print('faster_rcnn success')
 
@@ -266,13 +265,17 @@ if __name__ == '__main__':
           box_deltas = bbox_pred.data
           if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
           # Optionally normalize targets by a precomputed mean and stdev
+            type_change_tic =time.time()
+            a = torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS).cuda() \
+                                      + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
+            type_change_toc=time.time()
+            type_change_time = type_change_toc - type_change_tic
             if args.class_agnostic:
-                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS).cuda() \
-                           + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
+
+                box_deltas = box_deltas.view(-1, 4) * a
                 box_deltas = box_deltas.view(1, -1, 4)
             else:
-                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_STDS).cuda() \
-                           + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).cuda()
+                box_deltas = box_deltas.view(-1, 4) * a
                 box_deltas = box_deltas.view(1, -1, 4 * len(imdb.classes))
 
           pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
@@ -286,20 +289,24 @@ if __name__ == '__main__':
       scores = scores.squeeze()
       pred_boxes = pred_boxes.squeeze()
 
-      #calculate average detection time
-      det_toc = time.time()
-      detect_time = det_toc - det_tic
-      avg_detect_time = (avg_detect_time*i+detect_time)/(i+1)
-      #calculate average base time
-      avg_base_time = (avg_base_time*i+base_time)/(i+1)
-      #calculate average head time
-      avg_head_time = (avg_head_time*i+head_time)/(i+1)
-      #calculate average reg time
       reg_toc = time.time()
       reg_time = reg_toc - reg_tic
-      avg_reg_time = (avg_reg_time*i+reg_time)/(i+1)
-      #calculate average rpn time
-      avg_rpn_time = (avg_rpn_time*i+rpn_time)/(i+1)
+      det_toc = time.time()
+      detect_time = det_toc - det_tic - ship_time
+      if i > 1:
+
+          #calculate average detection time
+
+          avg_detect_time = (avg_detect_time*i+detect_time)/(i+1)
+          #calculate average base time
+          avg_base_time = (avg_base_time*i+base_time)/(i+1)
+          #calculate average head time
+          avg_head_time = (avg_head_time*i+head_time)/(i+1)
+          #calculate average reg time
+
+          avg_reg_time = (avg_reg_time*i+reg_time)/(i+1)
+          #calculate average rpn time
+          avg_rpn_time = (avg_rpn_time*i+rpn_time)/(i+1)
 
       misc_tic = time.time()
       if vis:
@@ -340,12 +347,11 @@ if __name__ == '__main__':
       misc_toc = time.time()
       nms_time = misc_toc - misc_tic
 
-      sys.stdout.write('im_detect: {:d}/{:d} {:.3f}s {:.3f}s avg_detect_time:{:.3f}s avg_head_time:{:.3f}s avg_rpn_time{:.3f}s \r \
-                       conv1_time:{:.3f}s, cls_score_time:{:.3f}s, reshape_time:{:.3f}s, bbox_pred_time:{:.3f}s, proposal_time:{:.3f}s \r' \
-                       .format(i + 1, num_images, detect_time, nms_time, avg_detect_time, avg_head_time, avg_rpn_time,
-                               conv1_time, cls_score_time, reshape_time, bbox_pred_time, proposal_time))
+      sys.stdout.write('im_detect: {:d}/{:d} detect_time:{:.3f}s nms_time:{:.3f}s avg_detect_time:{:.3f}s \
+      base_time:{:.3f}s avg_base_time:{:.3f} head_time{:.3f} avg_head_time:{:.3f} reg_time:{:.3f} avg_reg_time:{:.3f} type_change_time:{:.3f} \r' \
+                       .format(i + 1, num_images, detect_time, nms_time, avg_detect_time, base_time, avg_base_time, head_time, avg_head_time, reg_time, avg_reg_time, type_change_time))
 
-      sys.stdout.flush()
+      #sys.stdout.flush()
 
       if vis:
           cv2.imwrite('result.png', im2show)

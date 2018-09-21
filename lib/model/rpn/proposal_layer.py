@@ -20,6 +20,7 @@ from .bbox_transform import bbox_transform_inv, clip_boxes, clip_boxes_batch
 from model.nms.nms_wrapper import nms
 
 import pdb
+import time
 
 DEBUG = False
 
@@ -64,6 +65,9 @@ class _ProposalLayer(nn.Module):
 
         # the first set of _num_anchors channels are bg probs
         # the second set are the fg probs
+        first_part_tic = time.time()
+
+        step_1_tic = time.time()
         scores = input[0][:, self._num_anchors:, :, :]
         bbox_deltas = input[1]
         im_info = input[2]
@@ -75,20 +79,61 @@ class _ProposalLayer(nn.Module):
         min_size      = cfg[cfg_key].RPN_MIN_SIZE
 
         batch_size = bbox_deltas.size(0)
+        step_1_toc = time.time()
+        step_1_time = step_1_toc - step_1_tic
+
+
+        step_2_tic = time.time()
 
         feat_height, feat_width = scores.size(2), scores.size(3)
         shift_x = np.arange(0, feat_width) * self._feat_stride
         shift_y = np.arange(0, feat_height) * self._feat_stride
         shift_x, shift_y = np.meshgrid(shift_x, shift_y)
+
+        step_2_toc = time.time()
+        step_2_time = step_2_toc - step_2_tic
+        shift_time_tic = time.time()
+
         shifts = torch.from_numpy(np.vstack((shift_x.ravel(), shift_y.ravel(),
                                   shift_x.ravel(), shift_y.ravel())).transpose())
-        shifts = shifts.contiguous().type_as(scores).float()
+
+        shift_time_toc = time.time()
+        shift_time = shift_time_toc - shift_time_tic
+        contiguous_tic = time.time()
+
+
+        shifts = shifts.contiguous()
+
+        contiguous_toc = time.time()
+        contiguous_time = contiguous_toc - contiguous_tic
+        type_as_tic = time.time()
+
+        shifts = shifts.cuda()
+
+        type_as_toc = time.time()
+        shifts_type_change_time = type_as_toc - type_as_tic
+        float_tic = time.time()
+
+        shifts = shifts.float()
+
+        float_toc = time.time()
+        float_time = float_toc - float_tic
+
 
         A = self._num_anchors
         K = shifts.size(0)
 
+
+        step_3_tic = time.time()
+
+        anchor_type_as_tic = time.time()
+
         self._anchors = self._anchors.type_as(scores)
-        # anchors = self._anchors.view(1, A, 4) + shifts.view(1, K, 4).permute(1, 0, 2).contiguous()
+
+        anchor_type_as_toc = time.time()
+        anchor_type_change_time = anchor_type_as_toc - anchor_type_as_tic
+
+       # anchors = self._anchors.view(1, A, 4) + shifts.view(1, K, 4).permute(1, 0, 2).contiguous()
         anchors = self._anchors.view(1, A, 4) + shifts.view(K, 1, 4)
         anchors = anchors.view(1, K * A, 4).expand(batch_size, K * A, 4)
 
@@ -101,7 +146,10 @@ class _ProposalLayer(nn.Module):
         # Same story for the scores:
         scores = scores.permute(0, 2, 3, 1).contiguous()
         scores = scores.view(batch_size, -1)
+        step_3_toc = time.time()
+        step_3_time = step_3_toc - step_3_tic
 
+        step_4_tic = time.time()
         # Convert anchors into proposals via bbox transformations
         proposals = bbox_transform_inv(anchors, bbox_deltas, batch_size)
 
@@ -125,6 +173,13 @@ class _ProposalLayer(nn.Module):
         _, order = torch.sort(scores_keep, 1, True)
 
         output = scores.new(batch_size, post_nms_topN, 5).zero_()
+        step_4_toc = time.time()
+        step_4_time = step_4_toc - step_4_tic
+
+        first_part_toc = time.time()
+        first_part_time = first_part_toc - first_part_tic
+        iter_time_tic = time.time()
+        #print(str(contiguous_time), str(type_as_time), str(float_time))
         for i in range(batch_size):
             # # 3. remove predicted boxes with either height or width < threshold
             # # (NOTE: convert min_size to input image scale stored in im_info[2])
@@ -158,7 +213,11 @@ class _ProposalLayer(nn.Module):
             output[i,:,0] = i
             output[i,:num_proposal,1:] = proposals_single
 
-        return output
+        iter_time_toc = time.time()
+        iter_time = iter_time_toc - iter_time_tic
+        type_change_time = shifts_type_change_time + anchor_type_change_time
+
+        return output, type_change_time
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""
