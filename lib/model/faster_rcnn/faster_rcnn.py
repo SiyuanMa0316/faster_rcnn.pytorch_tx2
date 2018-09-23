@@ -131,7 +131,7 @@ class _fasterRCNN(nn.Module):
         head_toc = time.time()
         head_time = head_toc - head_tic - ship_time
 
-        rpn_time = rpn_toc - rpn_tic
+        rpn_time = rpn_toc - rpn_tic - ship_time
 
         roi_pooling_time = roi_pooling_toc - roi_pooling_tic
 

@@ -290,7 +290,7 @@ if __name__ == '__main__':
       pred_boxes = pred_boxes.squeeze()
 
       reg_toc = time.time()
-      reg_time = reg_toc - reg_tic
+      reg_time = reg_toc - reg_tic - type_change_time
       det_toc = time.time()
       detect_time = det_toc - det_tic - ship_time
       if i > 1:
@@ -347,9 +347,9 @@ if __name__ == '__main__':
       misc_toc = time.time()
       nms_time = misc_toc - misc_tic
 
-      sys.stdout.write('im_detect: {:d}/{:d} detect_time:{:.3f}s nms_time:{:.3f}s avg_detect_time:{:.3f}s \
-      base_time:{:.3f}s avg_base_time:{:.3f} head_time{:.3f} avg_head_time:{:.3f} reg_time:{:.3f} avg_reg_time:{:.3f} type_change_time:{:.3f} \r' \
-                       .format(i + 1, num_images, detect_time, nms_time, avg_detect_time, base_time, avg_base_time, head_time, avg_head_time, reg_time, avg_reg_time, type_change_time))
+      sys.stdout.write('im_detect: {:d}/{:d} detect_time:{:.3f}s  avg_detect_time:{:.3f}s \
+base_time:{:.3f} ||rpn_time{:.3f} ||roi_pooling_time:{:.3f} ||head:{:.3f} ||reg_time:{:.3f} ||nms_time:{:.3f}s \r' \
+                       .format(i + 1, num_images, detect_time, avg_detect_time, base_time, rpn_time, roi_pooling_time, headtotail_time, reg_time, nms_time))
 
       #sys.stdout.flush()
 
