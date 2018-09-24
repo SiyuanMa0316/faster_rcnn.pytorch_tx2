@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import print_function
 # --------------------------------------------------------
 # Faster R-CNN
 # Copyright (c) 2015 Microsoft
@@ -65,9 +66,10 @@ class _ProposalLayer(nn.Module):
 
         # the first set of _num_anchors channels are bg probs
         # the second set are the fg probs
-        first_part_tic = time.time()
+        cpu_tic = time.time()
 
-        step_1_tic = time.time()
+        total_tic = time.time()
+
         scores = input[0][:, self._num_anchors:, :, :]
         bbox_deltas = input[1]
         im_info = input[2]
@@ -79,59 +81,45 @@ class _ProposalLayer(nn.Module):
         min_size      = cfg[cfg_key].RPN_MIN_SIZE
 
         batch_size = bbox_deltas.size(0)
-        step_1_toc = time.time()
-        step_1_time = step_1_toc - step_1_tic
 
 
-        step_2_tic = time.time()
 
         feat_height, feat_width = scores.size(2), scores.size(3)
         shift_x = np.arange(0, feat_width) * self._feat_stride
         shift_y = np.arange(0, feat_height) * self._feat_stride
         shift_x, shift_y = np.meshgrid(shift_x, shift_y)
 
-        step_2_toc = time.time()
-        step_2_time = step_2_toc - step_2_tic
-        shift_time_tic = time.time()
+
 
         shifts = torch.from_numpy(np.vstack((shift_x.ravel(), shift_y.ravel(),
                                   shift_x.ravel(), shift_y.ravel())).transpose())
-
-        shift_time_toc = time.time()
-        shift_time = shift_time_toc - shift_time_tic
-        contiguous_tic = time.time()
-
-
         shifts = shifts.contiguous()
 
-        contiguous_toc = time.time()
-        contiguous_time = contiguous_toc - contiguous_tic
-        type_as_tic = time.time()
+        cpu_toc = time.time()
+        cpu_time = cpu_toc - cpu_tic
+        shifts_ship_tic = time.time()
 
         shifts = shifts.cuda()
 
-        type_as_toc = time.time()
-        shifts_type_change_time = type_as_toc - type_as_tic
-        float_tic = time.time()
+        shifts_ship_toc = time.time()
+        shifts_type_change_time = shifts_ship_toc - shifts_ship_tic
 
         shifts = shifts.float()
 
-        float_toc = time.time()
-        float_time = float_toc - float_tic
 
 
         A = self._num_anchors
         K = shifts.size(0)
 
 
-        step_3_tic = time.time()
+        anchor_ship_tic = time.time()
 
-        anchor_type_as_tic = time.time()
+        self._anchors = self._anchors.cuda()
 
-        self._anchors = self._anchors.type_as(scores)
+        anchor_ship_toc = time.time()
+        anchor_type_change_time = anchor_ship_toc - anchor_ship_tic
 
-        anchor_type_as_toc = time.time()
-        anchor_type_change_time = anchor_type_as_toc - anchor_type_as_tic
+        pre_transform_tic = time.time()
 
        # anchors = self._anchors.view(1, A, 4) + shifts.view(1, K, 4).permute(1, 0, 2).contiguous()
         anchors = self._anchors.view(1, A, 4) + shifts.view(K, 1, 4)
@@ -146,10 +134,12 @@ class _ProposalLayer(nn.Module):
         # Same story for the scores:
         scores = scores.permute(0, 2, 3, 1).contiguous()
         scores = scores.view(batch_size, -1)
-        step_3_toc = time.time()
-        step_3_time = step_3_toc - step_3_tic
 
-        step_4_tic = time.time()
+        pre_transform_toc = time.time()
+        pre_transform_time = pre_transform_toc - pre_transform_tic
+
+        get_proposal_tic = time.time()
+
         # Convert anchors into proposals via bbox transformations
         proposals = bbox_transform_inv(anchors, bbox_deltas, batch_size)
 
@@ -170,17 +160,28 @@ class _ProposalLayer(nn.Module):
         
         scores_keep = scores
         proposals_keep = proposals
+
+        get_proposal_toc = time.time()
+        get_proposal_time = get_proposal_toc - get_proposal_tic
+
+        sort_tic = time.time()
+
         _, order = torch.sort(scores_keep, 1, True)
 
-        output = scores.new(batch_size, post_nms_topN, 5).zero_()
-        step_4_toc = time.time()
-        step_4_time = step_4_toc - step_4_tic
+        sort_toc = time.time()
+        sort_time = sort_toc - sort_tic
 
-        first_part_toc = time.time()
-        first_part_time = first_part_toc - first_part_tic
-        iter_time_tic = time.time()
+        type_change_time = shifts_type_change_time + anchor_type_change_time
+
+        output_tic = time.time()
+        output = scores.new(batch_size, post_nms_topN, 5).zero_()
+        output_toc = time.time()
+        output_time = output_toc - output_tic
+
         #print(str(contiguous_time), str(type_as_time), str(float_time))
         for i in range(batch_size):
+
+            before_nms_tic = time.time()
             # # 3. remove predicted boxes with either height or width < threshold
             # # (NOTE: convert min_size to input image scale stored in im_info[2])
             proposals_single = proposals_keep[i]
@@ -196,11 +197,22 @@ class _ProposalLayer(nn.Module):
             proposals_single = proposals_single[order_single, :]
             scores_single = scores_single[order_single].view(-1,1)
 
+            before_nms_toc = time.time()
+            before_nms_time = before_nms_toc - before_nms_tic
+
             # 6. apply nms (e.g. threshold = 0.7)
             # 7. take after_nms_topN (e.g. 300)
             # 8. return the top proposals (-> RoIs top)
 
+            nms_tic = time.time()
+
             keep_idx_i = nms(torch.cat((proposals_single, scores_single), 1), nms_thresh, force_cpu=not cfg.USE_GPU_NMS)
+
+            nms_toc = time.time()
+            nms_time = nms_toc - nms_tic
+
+            after_nms_tic = time.time()
+
             keep_idx_i = keep_idx_i.long().view(-1)
 
             if post_nms_topN > 0:
@@ -213,9 +225,17 @@ class _ProposalLayer(nn.Module):
             output[i,:,0] = i
             output[i,:num_proposal,1:] = proposals_single
 
-        iter_time_toc = time.time()
-        iter_time = iter_time_toc - iter_time_tic
-        type_change_time = shifts_type_change_time + anchor_type_change_time
+            after_nms_toc = time.time()
+            after_nms_time = after_nms_toc - after_nms_tic
+
+
+        total_toc = time.time()
+        total_time = total_toc - total_tic - type_change_time
+
+
+
+        print('PROPOSAL LAYER TIME DISTRIBUTION:  total_time:', total_time, '\n    pre_transform:', pre_transform_time, ' get_proposal', get_proposal_time, ' sort:', sort_time, 'output:', output_time, '\n', \
+              '    before_nms:', before_nms_time, ' nms_time:', nms_time, 'after_nms:', after_nms_time)
 
         return output, type_change_time
 

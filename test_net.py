@@ -291,8 +291,7 @@ if __name__ == '__main__':
 
       reg_toc = time.time()
       reg_time = reg_toc - reg_tic - type_change_time
-      det_toc = time.time()
-      detect_time = det_toc - det_tic - ship_time
+
       if i > 1:
 
           #calculate average detection time
@@ -346,13 +345,15 @@ if __name__ == '__main__':
 
       misc_toc = time.time()
       nms_time = misc_toc - misc_tic
-
-      sys.stdout.write('im_detect: {:d}/{:d} detect_time:{:.3f}s  avg_detect_time:{:.3f}s \
-base_time:{:.3f} ||rpn_time{:.3f} ||roi_pooling_time:{:.3f} ||head:{:.3f} ||reg_time:{:.3f} ||nms_time:{:.3f}s \r' \
-                       .format(i + 1, num_images, detect_time, avg_detect_time, base_time, rpn_time, roi_pooling_time, headtotail_time, reg_time, nms_time))
+      det_toc = time.time()
+      detect_time = det_toc - det_tic - ship_time - type_change_time
+      #sys.stdout.write('im_detect: {:d}/{:d} detect_time:{:.3f}s  avg_detect_time:{:.3f}s \
+#base_time:{:.3f} ||rpn_time{:.3f} ||roi_pooling_time:{:.3f} ||head:{:.3f} ||reg_time:{:.3f} ||nms_time:{:.3f}s \r' \
+      #                 .format(i + 1, num_images, detect_time, avg_detect_time, base_time, rpn_time, roi_pooling_time, headtotail_time, reg_time, nms_time))
 
       #sys.stdout.flush()
 
+      print('TIME DISTRIBUTION:  total:', detect_time,'\n    base:', base_time, ' rpn:', rpn_time, ' roi_pooling:', roi_pooling_time, ' classifier:', headtotail_time, ' regression:', reg_time, ' final_nms:', nms_time, '\n')
       if vis:
           cv2.imwrite('result.png', im2show)
           pdb.set_trace()

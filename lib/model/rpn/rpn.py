@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import print_function
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -68,15 +69,16 @@ class _RPN(nn.Module):
         cls_score_tic = time.time()
         # get rpn classification score
         rpn_cls_score = self.RPN_cls_score(rpn_conv1)
-        cls_score_toc = time.time()
-        cls_score_time = cls_score_toc - cls_score_tic
 
-        reshape_tic = time.time()
+
+        #reshape_tic = time.time()
         rpn_cls_score_reshape = self.reshape(rpn_cls_score, 2)
         rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, 1)
         rpn_cls_prob = self.reshape(rpn_cls_prob_reshape, self.nc_score_out)
-        reshape_toc = time.time()
-        reshape_time = reshape_toc - reshape_tic
+        #reshape_toc = time.time()
+        #reshape_time = reshape_toc - reshape_tic
+        cls_score_toc = time.time()
+        cls_score_time = cls_score_toc - cls_score_tic
 
         bbox_pred_tic = time.time()
         # get rpn offsets to the anchor boxes
@@ -88,10 +90,13 @@ class _RPN(nn.Module):
         cfg_key = 'TRAIN' if self.training else 'TEST'
 
         proposal_tic = time.time()
+
         rois, ship_time = self.RPN_proposal((rpn_cls_prob.data, rpn_bbox_pred.data,
                                  im_info, cfg_key))
+
         proposal_toc = time.time()
-        proposal_time = proposal_toc - proposal_tic
+        proposal_time = proposal_toc - proposal_tic - ship_time
+        total_rpn_time = proposal_toc - conv1_tic - ship_time
 
         self.rpn_loss_cls = 0
         self.rpn_loss_box = 0
@@ -123,4 +128,5 @@ class _RPN(nn.Module):
             self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                                             rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
 
+        print('RPN TIME DISTRIBUTION: ', ' total: ', total_rpn_time, '\n    conv1: ', conv1_time, ' get_cls_score: ',  cls_score_time, ' get bbox_pred: ', bbox_pred_time,' make_proposal: ', proposal_time)
         return rois, self.rpn_loss_cls, self.rpn_loss_box, proposal_time, ship_time
