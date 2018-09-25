@@ -232,10 +232,13 @@ class _ProposalLayer(nn.Module):
         total_toc = time.time()
         total_time = total_toc - total_tic - type_change_time
 
+        f = open('/home/nvidia/siyuan-workspace/faster-rcnn.pytorch/proposal_layer_time_distribution.txt','a')
+        string = str(total_time)+' '+str(pre_transform_time)+' '+str(get_proposal_time)+' '+str(sort_time)+' '+str(output_time)+' '+str(before_nms_time)+' '+str(nms_time)+' '+str(after_nms_time)+'\n'
+        f.write(string)
+        f.close()
 
-
-        print('PROPOSAL LAYER TIME DISTRIBUTION:  total_time:', total_time, '\n    pre_transform:', pre_transform_time, ' get_proposal', get_proposal_time, ' sort:', sort_time, 'output:', output_time, '\n', \
-              '    before_nms:', before_nms_time, ' nms_time:', nms_time, 'after_nms:', after_nms_time)
+        #print('PROPOSAL LAYER TIME DISTRIBUTION:  total_time:', total_time, '\n    pre_transform:', pre_transform_time, ' get_proposal', get_proposal_time, ' sort:', sort_time, 'output:', output_time, '\n', \
+        #      '    before_nms:', before_nms_time, ' nms_time:', nms_time, 'after_nms:', after_nms_time)
 
         return output, type_change_time
 

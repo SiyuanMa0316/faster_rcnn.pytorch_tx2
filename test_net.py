@@ -98,6 +98,8 @@ weight_decay = cfg.TRAIN.WEIGHT_DECAY
 
 if __name__ == '__main__':
 
+
+
   args = parse_args()
 
   print('Called with args:')
@@ -214,7 +216,8 @@ if __name__ == '__main__':
     thresh = 0.0
 
   save_name = 'faster_rcnn_10'
-  num_images = len(imdb.image_index)
+  #num_images = len(imdb.image_index)
+  num_images = 1000
   all_boxes = [[[] for _ in xrange(num_images)]
                for _ in xrange(imdb.num_classes)]
 
@@ -353,18 +356,25 @@ if __name__ == '__main__':
 
       #sys.stdout.flush()
 
-      print('TIME DISTRIBUTION:  total:', detect_time,'\n    base:', base_time, ' rpn:', rpn_time, ' roi_pooling:', roi_pooling_time, ' classifier:', headtotail_time, ' regression:', reg_time, ' final_nms:', nms_time, '\n')
+      file_handle = open('test_net_inference_time_distribution.txt', mode='a')
+      string = str(detect_time)+' '+str(base_time)+' '+str(rpn_time)+' '+str(roi_pooling_time)+' '+str(headtotail_time)+' '+str(reg_time)+' '+str(nms_time)+'\n'
+      file_handle.write(string)
+      file_handle.close()
+
+      #print('TIME DISTRIBUTION:  total:', detect_time,'\n    base:', base_time, ' rpn:', rpn_time, \
+      #      ' roi_pooling:', roi_pooling_time, ' classifier:', headtotail_time, ' regression:', reg_time, \
+      #      ' final_nms:', nms_time, '\n')
       if vis:
           cv2.imwrite('result.png', im2show)
           pdb.set_trace()
           #cv2.imshow('test', im2show)
           #cv2.waitKey(0)
 
-  with open(det_file, 'wb') as f:
-      pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
+  #with open(det_file, 'wb') as f:
+  #    pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
-  print('Evaluating detections')
-  imdb.evaluate_detections(all_boxes, output_dir)
+  #print('Evaluating detections')
+  #imdb.evaluate_detections(all_boxes, output_dir)
 
-  end = time.time()
-  print("test time: %0.4fs" % (end - start))
+  #end = time.time()
+  #print("test time: %0.4fs" % (end - start))

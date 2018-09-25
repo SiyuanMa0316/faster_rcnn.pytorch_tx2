@@ -10,6 +10,8 @@ from .proposal_layer import _ProposalLayer
 from .anchor_target_layer import _AnchorTargetLayer
 from model.utils.net_utils import _smooth_l1_loss
 
+#import os
+
 import numpy as np
 import math
 import pdb
@@ -128,5 +130,10 @@ class _RPN(nn.Module):
             self.rpn_loss_box = _smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                                             rpn_bbox_outside_weights, sigma=3, dim=[1,2,3])
 
-        print('RPN TIME DISTRIBUTION: ', ' total: ', total_rpn_time, '\n    conv1: ', conv1_time, ' get_cls_score: ',  cls_score_time, ' get bbox_pred: ', bbox_pred_time,' make_proposal: ', proposal_time)
+        file_rpn = open('/home/nvidia/siyuan-workspace/faster-rcnn.pytorch/rpn_inference_time_distribution.txt', 'a')
+        rpn_string = str(total_rpn_time)+' '+str(conv1_time)+' '+str(cls_score_time)+' '+str(bbox_pred_time)+' '+str(proposal_time)+'\n'
+        file_rpn.write(rpn_string)
+        file_rpn.close()
+
+        #print('RPN TIME DISTRIBUTION: ', ' total: ', total_rpn_time, '\n    conv1: ', conv1_time, ' get_cls_score: ',  cls_score_time, ' get bbox_pred: ', bbox_pred_time,' make_proposal: ', proposal_time)
         return rois, self.rpn_loss_cls, self.rpn_loss_box, proposal_time, ship_time
