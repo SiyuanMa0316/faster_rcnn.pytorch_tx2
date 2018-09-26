@@ -30,7 +30,6 @@ from model.rpn.bbox_transform import bbox_transform_inv
 from model.utils.net_utils import save_net, load_net, vis_detections
 from model.faster_rcnn.vgg16 import vgg16
 from model.faster_rcnn.resnet import resnet
-
 import pdb
 
 try:
@@ -217,7 +216,7 @@ if __name__ == '__main__':
 
   save_name = 'faster_rcnn_10'
   #num_images = len(imdb.image_index)
-  num_images = 1000
+  num_images = 100
   all_boxes = [[[] for _ in xrange(num_images)]
                for _ in xrange(imdb.num_classes)]
 
@@ -241,6 +240,11 @@ if __name__ == '__main__':
   avg_head_time=0
   avg_reg_time=0
   avg_rpn_time=0
+
+  file_test = open('test_net_inference_time_distribution.txt', mode='a')
+  file_rpn = open('/home/nvidia/siyuan-workspace/faster-rcnn.pytorch/rpn_inference_time_distribution.txt', 'a')
+  file_proposal = open('/home/nvidia/siyuan-workspace/faster-rcnn.pytorch/proposal_layer_time_distribution.txt', 'a')
+
   for i in range(num_images):
 
       data = next(data_iter)
@@ -256,7 +260,7 @@ if __name__ == '__main__':
       rpn_loss_cls, rpn_loss_box, \
       RCNN_loss_cls, RCNN_loss_bbox, \
       rois_label, base_time, head_time, rpn_time, roi_pooling_time, headtotail_time, bbox_and_prob_time, \
-      proposal_time, ship_time  = fasterRCNN(im_data, im_info, gt_boxes, num_boxes)
+      proposal_time, ship_time  = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, file_rpn, file_proposal)
 
       #print('faster_rcnn success')
 
@@ -356,20 +360,23 @@ if __name__ == '__main__':
 
       #sys.stdout.flush()
 
-      file_handle = open('test_net_inference_time_distribution.txt', mode='a')
-      string = str(detect_time)+' '+str(base_time)+' '+str(rpn_time)+' '+str(roi_pooling_time)+' '+str(headtotail_time)+' '+str(reg_time)+' '+str(nms_time)+'\n'
-      file_handle.write(string)
-      file_handle.close()
 
-      #print('TIME DISTRIBUTION:  total:', detect_time,'\n    base:', base_time, ' rpn:', rpn_time, \
-      #      ' roi_pooling:', roi_pooling_time, ' classifier:', headtotail_time, ' regression:', reg_time, \
-      #      ' final_nms:', nms_time, '\n')
+      string = str(detect_time)+' '+str(base_time)+' '+str(rpn_time)+' '+str(roi_pooling_time)+' '+str(headtotail_time)+' '+str(reg_time)+' '+str(nms_time)+'\n'
+      file_test.write(string)
+
+
+      print('TIME DISTRIBUTION:  total:', detect_time,'\n    base:', base_time, ' rpn:', rpn_time, \
+            ' roi_pooling:', roi_pooling_time, ' classifier:', headtotail_time, ' regression:', reg_time, \
+            ' final_nms:', nms_time, '\n')
       if vis:
           cv2.imwrite('result.png', im2show)
           pdb.set_trace()
           #cv2.imshow('test', im2show)
           #cv2.waitKey(0)
 
+  file_test.close()
+  file_rpn.close()
+  file_proposal.close()
   #with open(det_file, 'wb') as f:
   #    pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
